@@ -1,0 +1,22 @@
+[compendium]
+name = "tetzontli"
+version = "0.1.0"
+min_compendium = "0.1.0"
+
+[registry]
+source = "public"
+
+[languages]
+c = "clang@22.1.2"
+python = "3.11.15"
+
+[tools]
+cmake = "4.3.3"
+ninja = "1.13.2"
+ccache = "4.13.6"
+
+# GoogleTest is pulled in via CMake FetchContent (see cmake/GoogleTest.cmake),
+# so no vcpkg [packages] block is needed. If you later prefer vcpkg-managed
+# gtest, add a vcpkg.json with "gtest" and uncomment below:
+# [packages]
+# vcpkg = "vcpkg.json"

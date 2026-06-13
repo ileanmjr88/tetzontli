@@ -1,0 +1,12 @@
+function(enable_sanitizers target)
+  if(ENABLE_SANITIZERS)
+    set(SANITIZERS -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_compile_options(${target} INTERFACE ${SANITIZERS})
+    target_link_options(${target} INTERFACE ${SANITIZERS})
+  endif()
+
+  if(ENABLE_COVERAGE)
+    target_compile_options(${target} INTERFACE --coverage -O0 -g)
+    target_link_options(${target} INTERFACE --coverage)
+  endif()
+endfunction()

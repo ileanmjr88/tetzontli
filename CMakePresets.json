@@ -1,0 +1,43 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+      }
+    },
+    {
+      "name": "compendium",
+      "displayName": "Compendium (managed toolchain, Debug)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "$env{CC}",
+        "CMAKE_CXX_COMPILER": "$env{CXX}",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "environment": {
+        "CXXFLAGS": "$penv{CXXFLAGS}",
+        "LDFLAGS": "$penv{LDFLAGS}",
+        "LIBRARY_PATH": "$penv{LIBRARY_PATH}",
+        "LD_LIBRARY_PATH": "$penv{LD_LIBRARY_PATH}"
+      }
+    },
+    {
+      "name": "sanitizers",
+      "displayName": "Compendium + ASan/UBSan",
+      "inherits": "compendium",
+      "cacheVariables": {
+        "ENABLE_SANITIZERS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "compendium", "configurePreset": "compendium" },
+    { "name": "sanitizers", "configurePreset": "sanitizers" }
+  ]
+}

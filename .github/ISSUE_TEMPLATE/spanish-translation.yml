@@ -1,0 +1,39 @@
+name: Corrección de traducción al español
+description: Reporta un error o una frase poco natural en la documentación en español (README.es.md).
+title: "[es] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ¡Gracias por ayudar a mejorar la documentación en español! Este proyecto
+        no acepta contribuciones de código, pero las correcciones de traducción
+        son muy bienvenidas.
+  - type: input
+    id: location
+    attributes:
+      label: ¿Dónde? (Where?)
+      description: ¿En qué archivo y sección está el texto?
+      placeholder: modules/ring_buffer/README.es.md — "Decisiones de diseño"
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Texto actual en español (Current text)
+      description: Pega la frase que crees que está mal o que suena poco natural.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Corrección sugerida (Suggested fix)
+      description: ¿Cómo lo redactarías?
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notas (opcional)
+      description: Notas regionales o de dialecto, contexto, o cualquier otra cosa.
+    validations:
+      required: false
