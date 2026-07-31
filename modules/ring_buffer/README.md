@@ -4,7 +4,7 @@
 
 A single-producer / single-consumer byte FIFO over caller-supplied storage.
 
-**[Blog](https://ilean.me/blog/)**
+**[Blog](https://www.ilean.me/blog/common-embedded-patterns-ring-buffer/)**
 
 ## Why it matters
 
