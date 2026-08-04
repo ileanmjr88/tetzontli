@@ -5,7 +5,7 @@
 Una FIFO de bytes de un solo productor / un solo consumidor (SPSC) sobre
 almacenamiento provisto por el llamador.
 
-**[Blog](https://ilean.me/es/blog/)**
+**[Blog](https://www.ilean.me/es/blog/patrones-embebidos-comunes-bufer-circular/)**
 
 ## Por qué importa
 
