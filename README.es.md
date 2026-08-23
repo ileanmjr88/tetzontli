@@ -30,7 +30,7 @@ binarios de prueba en C++.
 | # | Módulo | Patrón | Estado |
 |---|--------|--------|--------|
 | 1 | [`ring_buffer`](modules/ring_buffer) | FIFO circular, SPSC, segura ante ISR | ✅ hecho |
-| 2 | [`memory_pool`](modules/memory_pool) | Asignador estático de bloques fijos | 📋 planeado |
+| 2 | [`memory_pool`](modules/memory_pool) | Asignador estático de bloques fijos | ✅ hecho |
 | 3 | [`state_machine`](modules/state_machine) | Máquina de estados finita | 📋 planeado |
 | 4 | [`command_dispatch`](modules/command_dispatch) | Tabla de despacho de comandos | 📋 planeado |
 | 5 | [`event_queue`](modules/event_queue) | Cola de eventos / mensajes | 📋 planeado |

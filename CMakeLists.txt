@@ -44,7 +44,7 @@ endif()
 # Each pattern is a self-contained static library + test target.
 # Add modules here as they are implemented.
 add_subdirectory(modules/ring_buffer)
-# add_subdirectory(modules/memory_pool)
+add_subdirectory(modules/memory_pool)
 # add_subdirectory(modules/state_machine)
 # add_subdirectory(modules/command_dispatch)
 # add_subdirectory(modules/event_queue)

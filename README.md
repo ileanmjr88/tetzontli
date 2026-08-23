@@ -28,7 +28,7 @@ that are painful to reproduce on a target. C sources are wrapped in
 | # | Module | Pattern | Status |
 |---|--------|---------|--------|
 | 1 | [`ring_buffer`](modules/ring_buffer) | Circular FIFO, SPSC, ISR-safe | ✅ built |
-| 2 | [`memory_pool`](modules/memory_pool) | Fixed-block static allocator | 📋 planned |
+| 2 | [`memory_pool`](modules/memory_pool) | Fixed-block static allocator | ✅ built |
 | 3 | [`state_machine`](modules/state_machine) | Finite state machine | 📋 planned |
 | 4 | [`command_dispatch`](modules/command_dispatch) | Command dispatch table | 📋 planned |
 | 5 | [`event_queue`](modules/event_queue) | Event / message queue | 📋 planned |
