@@ -4,7 +4,7 @@
 
 A fixed-size block allocator over caller-supplied storage.
 
-**[Blog](https://www.ilean.me/blog/)**
+**[Blog](https://www.ilean.me/blog/common-embedded-patterns-memory-pool/)**
 
 ## Why it matters
 

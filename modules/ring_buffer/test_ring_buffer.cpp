@@ -13,7 +13,7 @@ class RingBufferTest : public ::testing::Test {
     uint8_t storage[kCapacity]{};
     ring_buffer_t rb{};
 
-    void SetUp() override {
+  void SetUp() override {
       ASSERT_TRUE(ring_buffer_init(&rb, storage, kCapacity));
     }
 };

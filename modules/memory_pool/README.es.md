@@ -5,7 +5,7 @@
 Un asignador de bloques de tamaño fijo sobre almacenamiento provisto por el
 llamador.
 
-**[Blog](https://www.ilean.me/es/blog/)**
+**[Blog](https://www.ilean.me/es/blog/patrones-embebidos-comunes-pool-de-memoria/)**
 
 ## Por qué importa
 
