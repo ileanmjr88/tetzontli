@@ -1,10 +1,10 @@
-#include <cstdint>
-#include <cstddef>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <set>
 #include <vector>
-#include <gtest/gtest.h>
 
 extern "C" {
 #include "memory_pool.h"
@@ -24,16 +24,17 @@ protected:
   memory_pool_t mp{};
 
   void SetUp() override {
-    ASSERT_TRUE(memory_pool_init(&mp, storage, sizeof storage, kBlockSize, kBlockAlign));
+    ASSERT_TRUE(memory_pool_init(&mp, storage, sizeof storage, kBlockSize,
+                                 kBlockAlign));
     ASSERT_EQ(memory_pool_capacity(&mp), kCapacity);
   }
 
   std::array<void *, kCapacity> AllocAll() {
     std::array<void *, kCapacity> blocks{};
-    for(size_t i = 0; i < kCapacity; ++i) {
+    for (size_t i = 0; i < kCapacity; ++i) {
       blocks[i] = memory_pool_alloc(&mp);
     }
-   return blocks;
+    return blocks;
   }
 };
 
@@ -46,8 +47,10 @@ TEST_F(MemoryPoolTest, InitRejectsNullPoolOrStorage) {
   memory_pool_t bad{};
   alignas(16) uint8_t buf[kStorageSize]{};
 
-  EXPECT_FALSE(memory_pool_init(nullptr, buf, sizeof buf, kBlockSize, kBlockAlign));
-  EXPECT_FALSE(memory_pool_init(&bad, nullptr, sizeof buf, kBlockSize, kBlockAlign));
+  EXPECT_FALSE(
+      memory_pool_init(nullptr, buf, sizeof buf, kBlockSize, kBlockAlign));
+  EXPECT_FALSE(
+      memory_pool_init(&bad, nullptr, sizeof buf, kBlockSize, kBlockAlign));
 
   EXPECT_EQ(memory_pool_capacity(&bad), 0u);
   EXPECT_EQ(memory_pool_alloc(&bad), nullptr);
@@ -64,28 +67,32 @@ TEST_F(MemoryPoolTest, InitRejectsNonPowerOfTwoAlign) {
   EXPECT_EQ(memory_pool_capacity(&bad), 0u);
 }
 
-TEST_F(MemoryPoolTest, InitRejectsBlockSmallerThanPointer){
+TEST_F(MemoryPoolTest, InitRejectsBlockSmallerThanPointer) {
   memory_pool_t bad{};
   alignas(16) uint8_t buf[kStorageSize]{};
 
   EXPECT_FALSE(memory_pool_init(&bad, buf, sizeof buf, 0, kBlockAlign));
   EXPECT_FALSE(memory_pool_init(&bad, buf, sizeof buf, 1, kBlockAlign));
-  EXPECT_FALSE(memory_pool_init(&bad, buf, sizeof buf, sizeof(void *) - 1, kBlockAlign));
+  EXPECT_FALSE(
+      memory_pool_init(&bad, buf, sizeof buf, sizeof(void *) - 1, kBlockAlign));
 
   memory_pool_t good{};
-  EXPECT_TRUE(memory_pool_init(&good, buf, sizeof buf, sizeof(void *), kBlockAlign));
+  EXPECT_TRUE(
+      memory_pool_init(&good, buf, sizeof buf, sizeof(void *), kBlockAlign));
 }
 
-TEST_F(MemoryPoolTest, InitRejectsStorageTooSmall){
+TEST_F(MemoryPoolTest, InitRejectsStorageTooSmall) {
   memory_pool_t bad{};
   alignas(16) uint8_t buf[kStorageSize]{};
 
   EXPECT_FALSE(memory_pool_init(&bad, buf, 0, kBlockSize, kBlockAlign));
-  EXPECT_FALSE(memory_pool_init(&bad, buf, kStride - 1, kBlockSize, kBlockAlign));
+  EXPECT_FALSE(
+      memory_pool_init(&bad, buf, kStride - 1, kBlockSize, kBlockAlign));
   EXPECT_EQ(memory_pool_capacity(&bad), 0u);
 
   memory_pool_t good{};
-  EXPECT_TRUE(memory_pool_init(&good, buf, sizeof buf, kBlockSize, kBlockAlign));
+  EXPECT_TRUE(
+      memory_pool_init(&good, buf, sizeof buf, kBlockSize, kBlockAlign));
   EXPECT_EQ(memory_pool_capacity(&good), 8u);
 }
 
@@ -110,7 +117,7 @@ TEST_F(MemoryPoolTest, InitRoundsStrideUpToAlignment) {
   alignas(16) uint8_t buf[kStorageSize]{};
 
   ASSERT_TRUE(memory_pool_init(&pool, buf, sizeof buf, 12, 8));
-  EXPECT_EQ(pool.block_size, 16u);  // the stride, not the requested 12
+  EXPECT_EQ(pool.block_size, 16u); // the stride, not the requested 12
 
   // Observable without reading the struct: consecutive blocks sit one stride
   // apart, not one requested-size apart.
@@ -131,14 +138,17 @@ TEST_F(MemoryPoolTest, InitTruncatesCapacityOnInexactDivision) {
   alignas(16) uint8_t buf[kStorageSize]{};
 
   // Exact: 128 / 16.
-  ASSERT_TRUE(memory_pool_init(&pool, buf, kStorageSize, kBlockSize, kBlockAlign));
+  ASSERT_TRUE(
+      memory_pool_init(&pool, buf, kStorageSize, kBlockSize, kBlockAlign));
   EXPECT_EQ(memory_pool_capacity(&pool), 8u);
 
   // Inexact: leftover bytes are dropped, never rounded up into a block.
-  ASSERT_TRUE(memory_pool_init(&pool, buf, kStorageSize - 1, kBlockSize, kBlockAlign));
+  ASSERT_TRUE(
+      memory_pool_init(&pool, buf, kStorageSize - 1, kBlockSize, kBlockAlign));
   EXPECT_EQ(memory_pool_capacity(&pool), 7u);
 
-  ASSERT_TRUE(memory_pool_init(&pool, buf, kStride * 3 + 1, kBlockSize, kBlockAlign));
+  ASSERT_TRUE(
+      memory_pool_init(&pool, buf, kStride * 3 + 1, kBlockSize, kBlockAlign));
   EXPECT_EQ(memory_pool_capacity(&pool), 3u);
 }
 
@@ -147,12 +157,14 @@ TEST_F(MemoryPoolTest, InitOnUnalignedStorageReducesCapacity) {
   memory_pool_t bumped_pool{};
   alignas(16) uint8_t big[kStorageSize + 16]{};
 
-  ASSERT_TRUE(memory_pool_init(&aligned_pool, big, kStorageSize, kBlockSize, kBlockAlign));
+  ASSERT_TRUE(memory_pool_init(&aligned_pool, big, kStorageSize, kBlockSize,
+                               kBlockAlign));
   EXPECT_EQ(memory_pool_capacity(&aligned_pool), 8u);
 
   // Same byte count, one byte later: 7 bytes go to the alignment bump, which
   // is enough to cost a whole block.
-  ASSERT_TRUE(memory_pool_init(&bumped_pool, big + 1, kStorageSize, kBlockSize, kBlockAlign));
+  ASSERT_TRUE(memory_pool_init(&bumped_pool, big + 1, kStorageSize, kBlockSize,
+                               kBlockAlign));
   EXPECT_EQ(memory_pool_capacity(&bumped_pool), 7u);
 
   // The first block is still properly aligned despite the odd start.
@@ -186,7 +198,8 @@ TEST_F(MemoryPoolTest, AllocReturnsOwnedAlignedBlocks) {
     void *block = memory_pool_alloc(&mp);
     ASSERT_NE(block, nullptr) << "alloc " << i;
     EXPECT_TRUE(memory_pool_owns(&mp, block)) << "alloc " << i;
-    EXPECT_EQ(reinterpret_cast<uintptr_t>(block) % kBlockAlign, 0u) << "alloc " << i;
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(block) % kBlockAlign, 0u)
+        << "alloc " << i;
   }
 }
 
@@ -276,7 +289,7 @@ TEST_F(MemoryPoolTest, FreeOnEmptyPoolIsRejected) {
   // Regression for bug #3: a genuinely-owned pointer, but nothing is
   // outstanding. This is the one slice of double-free that IS detectable.
   EXPECT_FALSE(memory_pool_free(&mp, block));
-  EXPECT_EQ(memory_pool_used(&mp), 0u);  // no wrap to SIZE_MAX
+  EXPECT_EQ(memory_pool_used(&mp), 0u); // no wrap to SIZE_MAX
   EXPECT_EQ(memory_pool_available(&mp), kCapacity);
 }
 
@@ -347,18 +360,19 @@ TEST_F(MemoryPoolTest, OwnsRejectsOutOfRangePointers) {
   // both sides of the arena to test with.
   memory_pool_t pool{};
   alignas(16) uint8_t big[kStorageSize + 32]{};
-  ASSERT_TRUE(memory_pool_init(&pool, big + 16, kStorageSize, kBlockSize, kBlockAlign));
+  ASSERT_TRUE(
+      memory_pool_init(&pool, big + 16, kStorageSize, kBlockSize, kBlockAlign));
 
   uint8_t *base = pool.base;
   uint8_t *end = base + kCapacity * kStride;
   alignas(16) uint8_t foreign[kStorageSize]{};
 
-  EXPECT_TRUE(memory_pool_owns(&pool, base));  // contrast: base itself is fine
+  EXPECT_TRUE(memory_pool_owns(&pool, base)); // contrast: base itself is fine
 
   EXPECT_FALSE(memory_pool_owns(&pool, nullptr));
   EXPECT_FALSE(memory_pool_owns(&pool, base - 1));
   EXPECT_FALSE(memory_pool_owns(&pool, base - kStride));
-  EXPECT_FALSE(memory_pool_owns(&pool, end));  // one past the last block
+  EXPECT_FALSE(memory_pool_owns(&pool, end)); // one past the last block
   EXPECT_FALSE(memory_pool_owns(&pool, end + 1));
   EXPECT_FALSE(memory_pool_owns(&pool, foreign));
   EXPECT_FALSE(memory_pool_owns(nullptr, base));
@@ -396,12 +410,13 @@ TEST_F(MemoryPoolTest, ResetPreservesHighWater) {
   EXPECT_EQ(memory_pool_used(&mp), 0u);
 
   // Only a fresh init clears it.
-  ASSERT_TRUE(memory_pool_init(&mp, storage, sizeof storage, kBlockSize, kBlockAlign));
+  ASSERT_TRUE(
+      memory_pool_init(&mp, storage, sizeof storage, kBlockSize, kBlockAlign));
   EXPECT_EQ(memory_pool_high_water(&mp), 0u);
 }
 
 TEST_F(MemoryPoolTest, ResetOnNullPoolIsNoOp) {
-  memory_pool_reset(nullptr);  // must not crash
+  memory_pool_reset(nullptr); // must not crash
 
   // The real pool is untouched by the null call.
   EXPECT_EQ(memory_pool_capacity(&mp), kCapacity);
@@ -461,7 +476,7 @@ TEST_F(MemoryPoolTest, BlocksDoNotOverlap) {
 
 TEST_F(MemoryPoolTest, ChurnPreservesInvariants) {
   std::vector<void *> live;
-  uint32_t rng = 12345u;  // fixed seed, so a failure reproduces exactly
+  uint32_t rng = 12345u; // fixed seed, so a failure reproduces exactly
 
   for (int op = 0; op < 20000; ++op) {
     const bool do_alloc = live.empty() || (NextRandom(rng) & 1u) != 0u;
@@ -472,7 +487,7 @@ TEST_F(MemoryPoolTest, ChurnPreservesInvariants) {
         ASSERT_TRUE(memory_pool_owns(&mp, block)) << "op " << op;
         live.push_back(block);
       } else {
-        ASSERT_EQ(live.size(), kCapacity) << "op " << op;  // only NULL when full
+        ASSERT_EQ(live.size(), kCapacity) << "op " << op; // only NULL when full
       }
     } else {
       const size_t idx = static_cast<size_t>(NextRandom(rng)) % live.size();
