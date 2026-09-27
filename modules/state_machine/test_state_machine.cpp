@@ -2,6 +2,7 @@
 #include <cstring>
 #include <gtest/gtest.h>
 #include <iterator>
+#include <string>
 
 extern "C" {
 #include "state_machine.h"
@@ -41,12 +42,33 @@ constexpr sm_transition_t kMotorTable[] = {
 
 constexpr size_t kMotorRows = std::size(kMotorTable);
 
+typedef struct {
+  bool brake_engaged;
+  bool pwm_enabled;
+  std::string log;
+} motor_t;
+
+void idle_entry(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  m->brake_engaged = true;
+  m->log += 'E';
+}
+
+constexpr sm_state_hooks_t kMotorHooks[STATE_COUNT] = {
+    {idle_entry, nullptr, nullptr},
+    {},
+    {},
+    {},
+};
+
 class StateMachineTest : public ::testing::Test {
 protected:
+  motor_t motor{};
   sm_t sm{};
+
   void SetUp() override {
-    ASSERT_TRUE(sm_init(&sm, kMotorTable, kMotorRows, nullptr, STATE_COUNT,
-                        IDLE, nullptr));
+    ASSERT_TRUE(sm_init(&sm, kMotorTable, kMotorRows, kMotorHooks, STATE_COUNT,
+                        IDLE, &motor));
   }
 };
 
@@ -145,12 +167,55 @@ TEST(StateMachineInit, StateOfNullIsAnyState) {
   EXPECT_EQ(sm_state(nullptr), SM_ANY_STATE);
 }
 
+TEST(StateMachineInit, AcceptsNullHooks) {
+  sm_t sm;
+  EXPECT_TRUE(sm_init(&sm, kMotorTable, kMotorRows, nullptr, STATE_COUNT, IDLE,
+                      nullptr));
+  EXPECT_EQ(sm.hooks, nullptr);
+}
+
 TEST_F(StateMachineTest, StartsInInitialState) {
   EXPECT_EQ(sm_state(&sm), IDLE);
 }
 
 TEST_F(StateMachineTest, IsNotStartedAfterInit) { EXPECT_FALSE(sm.started); }
 
-TEST_F(StateMachineTest, AcceptsNullHooks) { EXPECT_EQ(sm.hooks, nullptr); }
+TEST_F(StateMachineTest, StartRunsInitialEntryOnce) {
+  EXPECT_TRUE(sm_start(&sm));
+  EXPECT_TRUE(motor.brake_engaged);
+  EXPECT_EQ(motor.log, "E");
+}
+
+TEST_F(StateMachineTest, StartSetsStarted) {
+  EXPECT_TRUE(sm_start(&sm));
+  EXPECT_TRUE(sm.started);
+}
+
+TEST_F(StateMachineTest, SecondStartIsRejected) {
+  EXPECT_TRUE(sm_start(&sm));
+  EXPECT_FALSE(sm_start(&sm));
+  EXPECT_EQ(motor.log, "E");
+}
+
+TEST(StateMachineStart, StartAfterFailedInitIsRejected) {
+  motor_t motor{};
+  sm_t sm;
+  EXPECT_FALSE(sm_init(&sm, nullptr, kMotorRows, kMotorHooks, STATE_COUNT, IDLE,
+                       &motor));
+  EXPECT_FALSE(sm_start(&sm));
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST(StateMachineStart, StartWithoutHooksSucceeds) {
+  motor_t motor{};
+  sm_t sm;
+  EXPECT_TRUE(sm_init(&sm, kMotorTable, kMotorRows, nullptr, STATE_COUNT, IDLE,
+                      &motor));
+  EXPECT_TRUE(sm_start(&sm));
+}
+
+TEST(StateMachineStart, StartNullIsRejected) {
+  EXPECT_FALSE(sm_start(nullptr));
+}
 
 } // namespace

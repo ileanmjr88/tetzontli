@@ -1,5 +1,11 @@
 #include "state_machine.h"
 
+static void run_entry(const sm_t *sm, sm_state_t state) {
+  if (sm->hooks != NULL && sm->hooks[state].on_entry != NULL) {
+    sm->hooks[state].on_entry(sm->ctx);
+  }
+}
+
 bool sm_init(sm_t *sm, const sm_transition_t *table, size_t count,
              const sm_state_hooks_t *hooks, sm_state_t state_count,
              sm_state_t initial, void *ctx) {
@@ -35,4 +41,15 @@ bool sm_init(sm_t *sm, const sm_transition_t *table, size_t count,
 
 sm_state_t sm_state(const sm_t *sm) {
   return (sm == NULL) ? SM_ANY_STATE : sm->current;
+}
+
+bool sm_start(sm_t *sm) {
+  if (sm == NULL || sm->table == NULL || sm->started) {
+    return false;
+  }
+
+  run_entry(sm, sm->current);
+
+  sm->started = true;
+  return true;
 }
