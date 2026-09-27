@@ -5,6 +5,9 @@ cmake-build-*/
 # Caches (clangd, ccache, etc.)
 .cache/
 
+# Testing
+Testing/
+
 # macOS
 .DS_Store
 
