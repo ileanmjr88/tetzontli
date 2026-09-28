@@ -6,6 +6,12 @@ static void run_entry(const sm_t *sm, sm_state_t state) {
   }
 }
 
+static void run_exit(const sm_t *sm, sm_state_t state) {
+  if (sm->hooks != NULL && sm->hooks[state].on_exit != NULL) {
+    sm->hooks[state].on_exit(sm->ctx);
+  }
+}
+
 bool sm_init(sm_t *sm, const sm_transition_t *table, size_t count,
              const sm_state_hooks_t *hooks, sm_state_t state_count,
              sm_state_t initial, void *ctx) {
@@ -52,4 +58,37 @@ bool sm_start(sm_t *sm) {
 
   sm->started = true;
   return true;
+}
+
+sm_result_t sm_dispatch(sm_t *sm, sm_event_t event) {
+  if (sm == NULL || !sm->started || sm->current >= sm->state_count) {
+    return SM_ERROR;
+  }
+
+  bool matched = false;
+  for (size_t i = 0u; i < sm->count; i++) {
+    const sm_transition_t *row = &sm->table[i];
+    if ((row->from != sm->current && row->from != SM_ANY_STATE) ||
+        row->event != event) {
+      continue;
+    }
+
+    matched = true;
+    if (row->guard != NULL && !row->guard(sm->ctx)) {
+      continue;
+    }
+
+    if (row->to != sm->current) {
+      run_exit(sm, sm->current);
+    }
+    if (row->action != NULL) {
+      row->action(sm->ctx);
+    }
+    if (row->to != sm->current) {
+      sm->current = row->to;
+      run_entry(sm, sm->current);
+    }
+    return SM_HANDLED;
+  }
+  return matched ? SM_GUARD_REJECTED : SM_UNHANDLED;
 }

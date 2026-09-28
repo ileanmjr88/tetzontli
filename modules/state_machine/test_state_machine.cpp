@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
 #include <iterator>
@@ -25,40 +24,86 @@ enum : sm_event_t {
   EV_RESET,
 };
 
-// Guards and actions are nullptr until the sm_start / sm_dispatch slices
-// add motor_t; the comment on each row says what goes there.
-constexpr sm_transition_t kMotorTable[] = {
-    // from          event           guard    action   to
-    {SM_ANY_STATE, EV_ESTOP, nullptr, nullptr, FAULT}, // action: motor_off
-    {IDLE, EV_ARM, nullptr, nullptr, ARMED},
-    {ARMED, EV_DISARM, nullptr, nullptr, IDLE},
-    {ARMED, EV_START, nullptr, nullptr, RUNNING}, // guard: battery_ok
-    {ARMED, EV_START, nullptr, nullptr, ARMED},   // action: warn_battery_low
-    {RUNNING, EV_STOP, nullptr, nullptr, ARMED},
-    {RUNNING, EV_SET_SPEED, nullptr, nullptr, RUNNING}, // action: set_speed
-    {RUNNING, EV_OVERCURRENT, nullptr, nullptr, FAULT}, // action: motor_off
-    {FAULT, EV_RESET, nullptr, nullptr, IDLE},          // guard: fault_cleared
-};
-
-constexpr size_t kMotorRows = std::size(kMotorTable);
-
 typedef struct {
   bool brake_engaged;
   bool pwm_enabled;
+  bool battery_ok;
+  bool fault_cleared;
   std::string log;
 } motor_t;
 
 void idle_entry(void *ctx) {
   auto *m = static_cast<motor_t *>(ctx);
   m->brake_engaged = true;
-  m->log += 'E';
+  m->log += 'I';
 }
+
+void running_entry(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  m->pwm_enabled = true;
+  m->log += 'R';
+}
+
+void running_exit(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  m->pwm_enabled = false;
+  m->log += 'r';
+}
+
+void fault_entry(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  m->brake_engaged = true;
+  m->pwm_enabled = false;
+  m->log += 'F';
+}
+
+bool battery_ok(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  return m->battery_ok;
+}
+
+bool fault_cleared(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  return m->fault_cleared;
+}
+
+void motor_off(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  m->pwm_enabled = false;
+  m->log += 'm';
+}
+
+void warn_battery_low(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  m->log += 'w';
+}
+
+void set_speed(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  m->log += 's';
+}
+
+// Safety row first: first match wins, so nothing can shadow the e-stop.
+constexpr sm_transition_t kMotorTable[] = {
+    // from          event           guard          action            to
+    {SM_ANY_STATE, EV_ESTOP, nullptr, motor_off, FAULT},
+    {IDLE, EV_ARM, nullptr, nullptr, ARMED},
+    {ARMED, EV_DISARM, nullptr, nullptr, IDLE},
+    {ARMED, EV_START, battery_ok, nullptr, RUNNING},
+    {ARMED, EV_START, nullptr, warn_battery_low, ARMED},
+    {RUNNING, EV_STOP, nullptr, nullptr, ARMED},
+    {RUNNING, EV_SET_SPEED, nullptr, set_speed, RUNNING},
+    {RUNNING, EV_OVERCURRENT, nullptr, motor_off, FAULT},
+    {FAULT, EV_RESET, fault_cleared, nullptr, IDLE},
+};
+
+constexpr size_t kMotorRows = std::size(kMotorTable);
 
 constexpr sm_state_hooks_t kMotorHooks[STATE_COUNT] = {
     {idle_entry, nullptr, nullptr},
     {},
-    {},
-    {},
+    {running_entry, running_exit, nullptr},
+    {fault_entry, nullptr, nullptr},
 };
 
 class StateMachineTest : public ::testing::Test {
@@ -183,7 +228,7 @@ TEST_F(StateMachineTest, IsNotStartedAfterInit) { EXPECT_FALSE(sm.started); }
 TEST_F(StateMachineTest, StartRunsInitialEntryOnce) {
   EXPECT_TRUE(sm_start(&sm));
   EXPECT_TRUE(motor.brake_engaged);
-  EXPECT_EQ(motor.log, "E");
+  EXPECT_EQ(motor.log, "I");
 }
 
 TEST_F(StateMachineTest, StartSetsStarted) {
@@ -194,7 +239,7 @@ TEST_F(StateMachineTest, StartSetsStarted) {
 TEST_F(StateMachineTest, SecondStartIsRejected) {
   EXPECT_TRUE(sm_start(&sm));
   EXPECT_FALSE(sm_start(&sm));
-  EXPECT_EQ(motor.log, "E");
+  EXPECT_EQ(motor.log, "I");
 }
 
 TEST(StateMachineStart, StartAfterFailedInitIsRejected) {
@@ -216,6 +261,151 @@ TEST(StateMachineStart, StartWithoutHooksSucceeds) {
 
 TEST(StateMachineStart, StartNullIsRejected) {
   EXPECT_FALSE(sm_start(nullptr));
+}
+
+class StartedStateMachineTest : public StateMachineTest {
+protected:
+  void SetUp() override {
+    StateMachineTest::SetUp();
+    ASSERT_TRUE(sm_start(&sm));
+    motor.log.clear();
+  }
+
+  void GoToRunning() {
+    motor.battery_ok = true;
+    ASSERT_EQ(sm_dispatch(&sm, EV_ARM), SM_HANDLED);
+    ASSERT_EQ(sm_dispatch(&sm, EV_START), SM_HANDLED);
+    motor.log.clear();
+  }
+};
+
+TEST(StateMachineDispatch, DispatchNullIsError) {
+  EXPECT_EQ(sm_dispatch(nullptr, EV_ARM), SM_ERROR);
+}
+
+TEST_F(StateMachineTest, DispatchBeforeStartIsError) {
+  EXPECT_EQ(sm_dispatch(&sm, EV_ARM), SM_ERROR);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST_F(StartedStateMachineTest, DispatchCorruptedStateIsError) {
+  sm.current = STATE_COUNT;
+  EXPECT_EQ(sm_dispatch(&sm, EV_ARM), SM_ERROR);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST_F(StartedStateMachineTest, DispatchMovesToTargetState) {
+  EXPECT_EQ(sm_dispatch(&sm, EV_ARM), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), ARMED);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST_F(StartedStateMachineTest, UnhandledEventLeavesStateUnchanged) {
+  EXPECT_EQ(sm_dispatch(&sm, EV_STOP), SM_UNHANDLED);
+  EXPECT_EQ(sm_state(&sm), IDLE);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST_F(StartedStateMachineTest, NoEventIsUnhandled) {
+  EXPECT_EQ(sm_dispatch(&sm, SM_NO_EVENT), SM_UNHANDLED);
+  EXPECT_EQ(sm_state(&sm), IDLE);
+}
+
+TEST_F(StartedStateMachineTest, TransitionRunsExitActionEntryInOrder) {
+  ASSERT_NO_FATAL_FAILURE(GoToRunning());
+  EXPECT_EQ(sm_dispatch(&sm, EV_OVERCURRENT), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), FAULT);
+  EXPECT_EQ(motor.log, "rmF");
+  EXPECT_FALSE(motor.pwm_enabled);
+}
+
+TEST_F(StartedStateMachineTest, SelfTransitionRunsOnlyAction) {
+  ASSERT_NO_FATAL_FAILURE(GoToRunning());
+  EXPECT_EQ(sm_dispatch(&sm, EV_SET_SPEED), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), RUNNING);
+  EXPECT_EQ(motor.log, "s");
+}
+
+TEST_F(StartedStateMachineTest, GuardPassFiresRow) {
+  motor.battery_ok = true;
+  ASSERT_EQ(sm_dispatch(&sm, EV_ARM), SM_HANDLED);
+  motor.log.clear();
+  EXPECT_EQ(sm_dispatch(&sm, EV_START), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), RUNNING);
+  EXPECT_EQ(motor.log, "R");
+}
+
+TEST_F(StartedStateMachineTest, GuardRejectFallsThroughToNextRow) {
+  motor.battery_ok = false;
+  ASSERT_EQ(sm_dispatch(&sm, EV_ARM), SM_HANDLED);
+  motor.log.clear();
+  EXPECT_EQ(sm_dispatch(&sm, EV_START), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), ARMED);
+  EXPECT_EQ(motor.log, "w");
+}
+
+TEST_F(StartedStateMachineTest, AllGuardsRejectedReturnsGuardRejected) {
+  ASSERT_EQ(sm_dispatch(&sm, EV_ESTOP), SM_HANDLED);
+  motor.log.clear();
+  motor.fault_cleared = false;
+
+  EXPECT_EQ(sm_dispatch(&sm, EV_RESET), SM_GUARD_REJECTED);
+  EXPECT_EQ(sm_state(&sm), FAULT);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST_F(StartedStateMachineTest, EstopReachesFaultFromEveryState) {
+  // idle_entry already engaged the brake, so clear it before each e-stop or
+  // the brake check proves nothing.
+  auto estop_from = [this](sm_state_t from, const char *expected_log) {
+    ASSERT_EQ(sm_state(&sm), from);
+    motor.brake_engaged = false;
+    motor.log.clear();
+    EXPECT_EQ(sm_dispatch(&sm, EV_ESTOP), SM_HANDLED);
+    EXPECT_EQ(sm_state(&sm), FAULT);
+    EXPECT_TRUE(motor.brake_engaged);
+    EXPECT_FALSE(motor.pwm_enabled);
+    EXPECT_EQ(motor.log, expected_log);
+  };
+  motor.fault_cleared = true;
+
+  ASSERT_NO_FATAL_FAILURE(estop_from(IDLE, "mF"));
+  ASSERT_EQ(sm_dispatch(&sm, EV_RESET), SM_HANDLED);
+
+  ASSERT_EQ(sm_dispatch(&sm, EV_ARM), SM_HANDLED);
+  ASSERT_NO_FATAL_FAILURE(estop_from(ARMED, "mF"));
+  ASSERT_EQ(sm_dispatch(&sm, EV_RESET), SM_HANDLED);
+
+  ASSERT_NO_FATAL_FAILURE(GoToRunning());
+  ASSERT_NO_FATAL_FAILURE(estop_from(RUNNING, "rmF"));
+}
+
+TEST_F(StartedStateMachineTest, EstopInFaultIsSelfTransition) {
+  ASSERT_EQ(sm_dispatch(&sm, EV_ESTOP), SM_HANDLED);
+  motor.log.clear();
+
+  EXPECT_EQ(sm_dispatch(&sm, EV_ESTOP), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), FAULT);
+  EXPECT_EQ(motor.log, "m");
+}
+
+TEST_F(StartedStateMachineTest, FullCycle) {
+  motor.battery_ok = true;
+  motor.fault_cleared = true;
+
+  ASSERT_EQ(sm_dispatch(&sm, EV_ARM), SM_HANDLED);
+  ASSERT_EQ(sm_state(&sm), ARMED);
+  ASSERT_EQ(sm_dispatch(&sm, EV_START), SM_HANDLED);
+  ASSERT_EQ(sm_state(&sm), RUNNING);
+  EXPECT_TRUE(motor.pwm_enabled);
+  ASSERT_EQ(sm_dispatch(&sm, EV_OVERCURRENT), SM_HANDLED);
+  ASSERT_EQ(sm_state(&sm), FAULT);
+  EXPECT_FALSE(motor.pwm_enabled);
+  ASSERT_EQ(sm_dispatch(&sm, EV_RESET), SM_HANDLED);
+  ASSERT_EQ(sm_state(&sm), IDLE);
+
+  EXPECT_TRUE(motor.brake_engaged);
+  EXPECT_EQ(motor.log, "RrmFI");
 }
 
 } // namespace
