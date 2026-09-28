@@ -29,8 +29,11 @@ typedef struct {
   bool pwm_enabled;
   bool battery_ok;
   bool fault_cleared;
+  int amps;
   std::string log;
 } motor_t;
+
+constexpr int kAmpLimit = 10;
 
 void idle_entry(void *ctx) {
   auto *m = static_cast<motor_t *>(ctx);
@@ -83,6 +86,16 @@ void set_speed(void *ctx) {
   m->log += 's';
 }
 
+// Stands in for the PID update; reports overcurrent instead of dispatching it.
+sm_event_t running_run(void *ctx) {
+  auto *m = static_cast<motor_t *>(ctx);
+  if (m->amps > kAmpLimit) {
+    return EV_OVERCURRENT;
+  }
+  m->log += 'p';
+  return SM_NO_EVENT;
+}
+
 // Safety row first: first match wins, so nothing can shadow the e-stop.
 constexpr sm_transition_t kMotorTable[] = {
     // from          event           guard          action            to
@@ -102,7 +115,7 @@ constexpr size_t kMotorRows = std::size(kMotorTable);
 constexpr sm_state_hooks_t kMotorHooks[STATE_COUNT] = {
     {idle_entry, nullptr, nullptr},
     {},
-    {running_entry, running_exit, nullptr},
+    {running_entry, running_exit, running_run},
     {fault_entry, nullptr, nullptr},
 };
 
@@ -406,6 +419,69 @@ TEST_F(StartedStateMachineTest, FullCycle) {
 
   EXPECT_TRUE(motor.brake_engaged);
   EXPECT_EQ(motor.log, "RrmFI");
+}
+
+TEST(StateMachineRun, RunNullIsError) { EXPECT_EQ(sm_run(nullptr), SM_ERROR); }
+
+TEST_F(StateMachineTest, RunBeforeStartIsError) {
+  EXPECT_EQ(sm_run(&sm), SM_ERROR);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST_F(StartedStateMachineTest, RunCorruptedStateIsError) {
+  sm.current = STATE_COUNT;
+  EXPECT_EQ(sm_run(&sm), SM_ERROR);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST_F(StartedStateMachineTest, RunWithoutOnRunIsHandled) {
+  EXPECT_EQ(sm_run(&sm), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), IDLE);
+  EXPECT_EQ(motor.log, "");
+}
+
+TEST(StateMachineRun, RunWithoutHooksIsHandled) {
+  motor_t motor{};
+  sm_t sm;
+  ASSERT_TRUE(sm_init(&sm, kMotorTable, kMotorRows, nullptr, STATE_COUNT, IDLE,
+                      &motor));
+  ASSERT_TRUE(sm_start(&sm));
+  EXPECT_EQ(sm_run(&sm), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), IDLE);
+}
+
+TEST_F(StartedStateMachineTest, RunNoEventStaysPut) {
+  ASSERT_NO_FATAL_FAILURE(GoToRunning());
+  motor.amps = kAmpLimit;
+  EXPECT_EQ(sm_run(&sm), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), RUNNING);
+  EXPECT_TRUE(motor.pwm_enabled);
+  EXPECT_EQ(motor.log, "p");
+}
+
+TEST_F(StartedStateMachineTest, RunEventDispatchesThroughTable) {
+  ASSERT_NO_FATAL_FAILURE(GoToRunning());
+  motor.amps = kAmpLimit + 1;
+  EXPECT_EQ(sm_run(&sm), SM_HANDLED);
+  EXPECT_EQ(sm_state(&sm), FAULT);
+  EXPECT_FALSE(motor.pwm_enabled);
+  EXPECT_EQ(motor.log, "rmF");
+}
+
+// The table is data, so a safety rule can be checked over every row at once.
+TEST(StateMachineTable, EveryRowIntoFaultCutsTheMotor) {
+  size_t fault_rows = 0u;
+  for (size_t i = 0u; i < kMotorRows; i++) {
+    const sm_transition_t &row = kMotorTable[i];
+    if (row.to != FAULT) {
+      continue;
+    }
+    SCOPED_TRACE("row " + std::to_string(i));
+    fault_rows++;
+    EXPECT_TRUE(row.action == motor_off);
+    EXPECT_EQ(row.guard, nullptr);
+  }
+  EXPECT_GT(fault_rows, 0u);
 }
 
 } // namespace

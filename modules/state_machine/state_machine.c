@@ -92,3 +92,19 @@ sm_result_t sm_dispatch(sm_t *sm, sm_event_t event) {
   }
   return matched ? SM_GUARD_REJECTED : SM_UNHANDLED;
 }
+
+sm_result_t sm_run(sm_t *sm) {
+  if (sm == NULL || !sm->started || sm->current >= sm->state_count) {
+    return SM_ERROR;
+  }
+
+  if (sm->hooks == NULL || sm->hooks[sm->current].on_run == NULL) {
+    return SM_HANDLED;
+  }
+
+  sm_event_t ev = sm->hooks[sm->current].on_run(sm->ctx);
+  if (ev == SM_NO_EVENT) {
+    return SM_HANDLED;
+  }
+  return sm_dispatch(sm, ev);
+}
