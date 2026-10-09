@@ -4,7 +4,7 @@
 
 A table-driven finite state machine over caller-supplied const tables.
 
-**[Blog](https://ilean.me/blog/)**
+**[Blog](https://www.ilean.me/blog/common-embedded-patterns-finite-state-machine/)**
 
 ## Why it matters
 

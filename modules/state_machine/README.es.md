@@ -5,7 +5,7 @@
 Una máquina de estados finitos basada en tablas sobre tablas constantes
 provistas por el llamador.
 
-**[Blog](https://ilean.me/es/blog/)**
+**[Blog](https://www.ilean.me/es/blog/patrones-embebidos-comunes-maquina-de-estados-finitos/)**
 
 ## Por qué importa
 
